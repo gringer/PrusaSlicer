@@ -451,6 +451,21 @@ void ConfigWizardPage::append_spacer(int space)
     content->AddSpacer(space);
 }
 
+#ifdef __linux__
+namespace integrate_desktop_internal{
+static bool should_integrate_desktop()
+{
+    const char *appimage_env = std::getenv("APPIMAGE");
+    if (appimage_env) {
+        BOOST_LOG_TRIVIAL(debug) << "APPIMAGE env set";
+        return true;
+    } else 
+        BOOST_LOG_TRIVIAL(debug) << "APPIMAGE env NOT set";
+
+    return false;
+}
+}
+#endif
 
 // Wizard pages
 
@@ -471,12 +486,20 @@ PageWelcome::PageWelcome(ConfigWizard *parent)
         new wxCheckBox(this, wxID_ANY, _L("Remove user profiles (a snapshot will be taken beforehand)"))
     ))
     , cbox_integrate(append(
-        new wxCheckBox(this, wxID_ANY, _L("Desktop integration"))
+        new wxCheckBox(this, wxID_ANY, _L("Perform desktop integration (This will set shortcuts to PrusaSlicer to this Appimage executable)."))
     ))
 {
     welcome_text->Hide();
     cbox_reset->Hide();
-    cbox_integrate->Show(true);
+#ifdef __linux__
+    if (integrate_desktop_internal::should_integrate_desktop())
+        cbox_integrate->Show(true);
+    else
+        cbox_integrate->Hide();
+#else
+    cbox_integrate->Hide();
+#endif
+    
 }
 
 void PageWelcome::set_run_reason(ConfigWizard::RunReason run_reason)
@@ -484,6 +507,14 @@ void PageWelcome::set_run_reason(ConfigWizard::RunReason run_reason)
     const bool data_empty = run_reason == ConfigWizard::RR_DATA_EMPTY;
     welcome_text->Show(data_empty);
     cbox_reset->Show(!data_empty);
+#ifdef __linux__
+    if (integrate_desktop_internal::should_integrate_desktop())
+        cbox_integrate->Show(true);
+    else
+        cbox_integrate->Hide();
+#else
+    cbox_integrate->Hide();
+#endif
 }
 
 
@@ -2378,9 +2409,11 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
         }
     }
 
+#ifdef __linux__
     // Desktop integration on Linux
     if (page_welcome->integrate_desktop()) 
         perform_desktop_integration();
+#endif
 
     // Decide whether to create snapshot based on run_reason and the reset profile checkbox
     bool snapshot = true;
@@ -2500,6 +2533,7 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
     preset_bundle->export_selections(*app_config);
 }
 
+#ifdef __linux__
 void ConfigWizard::priv::perform_desktop_integration()
 {
     BOOST_LOG_TRIVIAL(debug) << "performing desktop integration";
@@ -2550,6 +2584,7 @@ void ConfigWizard::priv::perform_desktop_integration()
     std::ofstream output(path);
     output << desktop_file;
 }
+#endif
 
 void ConfigWizard::priv::update_presets_in_config(const std::string& section, const std::string& alias_key, bool add)
 {
