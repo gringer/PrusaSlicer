@@ -458,6 +458,7 @@ static bool should_integrate_desktop()
     const char *appimage_env = std::getenv("APPIMAGE");
     if (appimage_env) {
         BOOST_LOG_TRIVIAL(debug) << "APPIMAGE env set";
+        // TODO: should check if same exec like in .desktop file?
         return true;
     } else 
         BOOST_LOG_TRIVIAL(debug) << "APPIMAGE env NOT set";
@@ -2534,6 +2535,7 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
 }
 
 #ifdef __linux__
+
 void ConfigWizard::priv::perform_desktop_integration()
 {
     BOOST_LOG_TRIVIAL(debug) << "performing desktop integration";
@@ -2546,43 +2548,88 @@ void ConfigWizard::priv::perform_desktop_integration()
             appimage_path = boost::filesystem::canonical(boost::filesystem::path(appimage_env)).string();
         } catch (std::exception &) {            
         }
+    } else {
+        // not appimage - not performing
+        BOOST_LOG_TRIVIAL(error) << "Performing desktop integration failed - not Appimage executable.";
+        return;
     }
+    // suffix string to create different desktop file for alpha, beta.
+    std::string version_suffix;
+    std::string version(SLIC3R_VERSION);
+    if (version.find("alpha") != std::string::npos)
+    {
+        version_suffix = "-alpha";
+    }else if (version.find("beta") != std::string::npos)
+    {
+        version_suffix = "-beta";
+    }
+
     // homedir contains path to ~/.local/share
     wxString homedir;
     if (! wxGetEnv(wxS("XDG_DATA_HOME"), &homedir) || homedir.empty() )
         homedir = wxFileName::GetHomeDir() + wxS("/.local/share");
     
-    // Copy icon PrusaSlicer.png from resources_dir()/icons to homedir/icons/
-    std::string icon_path = GUI::format("%1%/icons/PrusaSlicer.png",resources_dir());
-    std::string dest_path = GUI::format("%1%/icons/PrusaSlicer.png", homedir);
+    // Copy icon PrusaSlicer-gcodeviewer_192px.png from resources_dir()/icons to homedir/icons/
+    std::string icon_path = GUI::format("%1%/icons/PrusaSlicer-gcodeviewer_192px.png",resources_dir());
+    std::string dest_path = GUI::format("%1%/icons/PrusaSlicer-gcodeviewer.png", homedir);
     BOOST_LOG_TRIVIAL(debug) << icon_path;
     BOOST_LOG_TRIVIAL(debug) << dest_path;
     std::string error_message;
+    auto cfrg = copy_file(icon_path, dest_path, error_message, false);
+    if (cfrg)
+    {
+        BOOST_LOG_TRIVIAL(error) << "copy icon fail(" << cfrg << "): " << error_message;
+    }
+
+    // Copy icon PrusaSlicer.png from resources_dir()/icons to homedir/icons/
+    icon_path = GUI::format("%1%/icons/PrusaSlicer.png",resources_dir());
+    dest_path = GUI::format("%1%/icons/PrusaSlicer.png", homedir);
+    BOOST_LOG_TRIVIAL(debug) << icon_path;
+    BOOST_LOG_TRIVIAL(debug) << dest_path;
     auto cfr = copy_file(icon_path, dest_path, error_message, false);
     if (cfr)
     {
         BOOST_LOG_TRIVIAL(error) << "copy icon fail(" << cfr << "): " << error_message;
     }
 
-    // Write desktop file
+    // Write slicer desktop file
     std::string desktop_file = GUI::format(
         "[Desktop Entry]\n"
-        "Name=PrusaSlicer\n"
+        "Name=PrusaSlicer%1%\n"
         "GenericName=3D Printing Software\n"
         "Icon=PrusaSlicer\n"
-        "Exec=%1% %%F\n"
+        "Exec=%2% %%F\n"
         "Terminal=false\n"
         "Type=Application\n"
         "MimeType=model/stl;application/vnd.ms-3mfdocument;application/prs.wavefront-obj;application/x-amf;\n"
         "Categories=Graphics;3DGraphics;Engineering;\n"
         "Keywords=3D;Printing;Slicer;slice;3D;printer;convert;gcode;stl;obj;amf;SLA\n"
         "StartupNotify=false\n"
-        "StartupWMClass=prusa-slicer", appimage_path);
+        "StartupWMClass=prusa-slicer", version_suffix, appimage_path);
 
-    std::string path = GUI::format("%1%/applications/PrusaSlicer.desktop", homedir);
+    std::string path = GUI::format("%1%/applications/PrusaSlicer%2%.desktop", homedir, version_suffix);
 
     std::ofstream output(path);
     output << desktop_file;
+
+    // Write gcode viewer desktop file
+    desktop_file = GUI::format(
+        "[Desktop Entry]\n"
+        "Name=Prusa Gcode viewer%1%\n"
+        "GenericName=3D Printing Software\n"
+        "Icon=PrusaSlicer-gcodeviewer\n"
+        "Exec=%2% --gcodeviwer %%F\n"
+        "Terminal=false\n"
+        "Type=Application\n"
+        "MimeType=text/x.gcode;\n"
+        "Categories=Graphics;3DGraphics;\n"
+        "Keywords=3D;Printing;Slicer;\n"
+        "StartupNotify=false", version_suffix, appimage_path);
+
+    path = GUI::format("%1%/applications/PrusaSlicerGcodeViewer%2%.desktop", homedir, version_suffix);
+
+    std::ofstream output_viewer(path);
+    output_viewer << desktop_file;
 }
 #endif
 
