@@ -2555,13 +2555,16 @@ void ConfigWizard::priv::perform_desktop_integration()
     }
     // suffix string to create different desktop file for alpha, beta.
     std::string version_suffix;
+    std::string name_suffix;
     std::string version(SLIC3R_VERSION);
     if (version.find("alpha") != std::string::npos)
     {
         version_suffix = "-alpha";
+        name_suffix = " - alpha";
     }else if (version.find("beta") != std::string::npos)
     {
         version_suffix = "-beta";
+        name_suffix = " - beta";
     }
 
     // homedir contains path to ~/.local/share
@@ -2605,7 +2608,7 @@ void ConfigWizard::priv::perform_desktop_integration()
         "Categories=Graphics;3DGraphics;Engineering;\n"
         "Keywords=3D;Printing;Slicer;slice;3D;printer;convert;gcode;stl;obj;amf;SLA\n"
         "StartupNotify=false\n"
-        "StartupWMClass=prusa-slicer", version_suffix, appimage_path);
+        "StartupWMClass=prusa-slicer", name_suffix, appimage_path);
 
     std::string path = GUI::format("%1%/applications/PrusaSlicer%2%.desktop", homedir, version_suffix);
 
@@ -2624,7 +2627,7 @@ void ConfigWizard::priv::perform_desktop_integration()
         "MimeType=text/x.gcode;\n"
         "Categories=Graphics;3DGraphics;\n"
         "Keywords=3D;Printing;Slicer;\n"
-        "StartupNotify=false", version_suffix, appimage_path);
+        "StartupNotify=false", name_suffix, appimage_path);
 
     path = GUI::format("%1%/applications/PrusaSlicerGcodeViewer%2%.desktop", homedir, version_suffix);
 
