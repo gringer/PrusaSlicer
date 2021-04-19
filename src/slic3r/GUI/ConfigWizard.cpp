@@ -2649,7 +2649,7 @@ void ConfigWizard::priv::perform_desktop_integration() const
 
     // Copy icon PrusaSlicer.png from resources_dir()/icons to homedir/icons/
     icon_path = GUI::format("%1%/icons/PrusaSlicer.png",resources_dir());
-    dest_path = GUI::format("%1%/icons/PrusaSlicer.png%2%", homedir, version_suffix);
+    dest_path = GUI::format("%1%/icons/PrusaSlicer%2%.png", homedir, version_suffix);
     BOOST_LOG_TRIVIAL(debug) << icon_path;
     BOOST_LOG_TRIVIAL(debug) << dest_path;
     auto cfr = copy_file(icon_path, dest_path, error_message, false);
@@ -2663,15 +2663,15 @@ void ConfigWizard::priv::perform_desktop_integration() const
         "[Desktop Entry]\n"
         "Name=PrusaSlicer%1%\n"
         "GenericName=3D Printing Software\n"
-        "Icon=PrusaSlicer%1%\n"
-        "Exec=%2% %%F\n"
+        "Icon=PrusaSlicer%2%\n"
+        "Exec=%3% %%F\n"
         "Terminal=false\n"
         "Type=Application\n"
         "MimeType=model/stl;application/vnd.ms-3mfdocument;application/prs.wavefront-obj;application/x-amf;\n"
         "Categories=Graphics;3DGraphics;Engineering;\n"
         "Keywords=3D;Printing;Slicer;slice;3D;printer;convert;gcode;stl;obj;amf;SLA\n"
         "StartupNotify=false\n"
-        "StartupWMClass=prusa-slicer", name_suffix, appimage_path);
+        "StartupWMClass=prusa-slicer", name_suffix, version_suffix, appimage_path);
 
     std::string path = GUI::format("%1%/applications/PrusaSlicer%2%.desktop", homedir, version_suffix);
 
@@ -2683,14 +2683,14 @@ void ConfigWizard::priv::perform_desktop_integration() const
         "[Desktop Entry]\n"
         "Name=Prusa Gcode Viewer%1%\n"
         "GenericName=3D Printing Software\n"
-        "Icon=PrusaSlicer-gcodeviewer%1%\n"
-        "Exec=%2% --gcodeviwer %%F\n"
+        "Icon=PrusaSlicer-gcodeviewer%2%\n"
+        "Exec=%3% --gcodeviwer %%F\n"
         "Terminal=false\n"
         "Type=Application\n"
         "MimeType=text/x.gcode;\n"
         "Categories=Graphics;3DGraphics;\n"
         "Keywords=3D;Printing;Slicer;\n"
-        "StartupNotify=false", name_suffix, appimage_path);
+        "StartupNotify=false", name_suffix, version_suffix, appimage_path);
 
     path = GUI::format("%1%/applications/PrusaSlicerGcodeViewer%2%.desktop", homedir, version_suffix);
 
