@@ -2535,8 +2535,71 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
 }
 
 #ifdef __linux__
+bool ConfigWizard::can_undo_desktop_integration()
+{
+    const char *appimage_env = std::getenv("APPIMAGE");
+    if (!appimage_env) {
+        return false;
+    }
+    // follows confirmation that PrusaSlicer.desktop exists
 
-void ConfigWizard::priv::perform_desktop_integration()
+    // homedir contains path to ~/.local/share
+    wxString homedir;
+    if (! wxGetEnv(wxS("XDG_DATA_HOME"), &homedir) || homedir.empty() )
+        homedir = wxFileName::GetHomeDir() + wxS("/.local/share");
+
+    std::string version_suffix;
+    std::string version(SLIC3R_VERSION);
+    if (version.find("alpha") != std::string::npos)
+    {
+        version_suffix = "-alpha";
+    }else if (version.find("beta") != std::string::npos)
+    {
+        version_suffix = "-beta";
+    }
+
+    std::string path = GUI::format("%1%/applications/PrusaSlicer%2%.desktop", homedir, version_suffix);
+    struct stat buffer;   
+    return (stat (path.c_str(), &buffer) == 0);
+}
+void ConfigWizard::undo_desktop_integration()
+{
+    const char *appimage_env = std::getenv("APPIMAGE");
+    if (!appimage_env) {
+         BOOST_LOG_TRIVIAL(error) << "Undo desktop integration failed - not Appimage executable.";
+        return;
+    }
+
+    std::string version_suffix;
+    std::string version(SLIC3R_VERSION);
+    if (version.find("alpha") != std::string::npos)
+    {
+        version_suffix = "-alpha";
+    }else if (version.find("beta") != std::string::npos)
+    {
+        version_suffix = "-beta";
+    }
+
+    // homedir contains path to ~/.local/share
+    wxString homedir;
+    if (! wxGetEnv(wxS("XDG_DATA_HOME"), &homedir) || homedir.empty() )
+        homedir = wxFileName::GetHomeDir() + wxS("/.local/share");
+
+   
+    // slicer .desktop
+    std::string path = GUI::format("%1%/applications/PrusaSlicer%2%.desktop", homedir, version_suffix);
+    std::remove(path.c_str());
+    // slicer icon
+    path = GUI::format("%1%/icons/PrusaSlicer%2%.png", homedir, version_suffix);
+    std::remove(path.c_str());
+    // gcode viwer .desktop
+    path = GUI::format("%1%/applications/PrusaSlicerGcodeViewer%2%.desktop", homedir, version_suffix);
+    std::remove(path.c_str());
+     // gcode viewer icon
+    path = GUI::format("%1%/icons/PrusaSlicer-gcodeviewer%2%.png", homedir, version_suffix);
+    std::remove(path.c_str());
+}
+void ConfigWizard::priv::perform_desktop_integration() const
 {
     BOOST_LOG_TRIVIAL(debug) << "performing desktop integration";
 
@@ -2574,7 +2637,7 @@ void ConfigWizard::priv::perform_desktop_integration()
     
     // Copy icon PrusaSlicer-gcodeviewer_192px.png from resources_dir()/icons to homedir/icons/
     std::string icon_path = GUI::format("%1%/icons/PrusaSlicer-gcodeviewer_192px.png",resources_dir());
-    std::string dest_path = GUI::format("%1%/icons/PrusaSlicer-gcodeviewer.png", homedir);
+    std::string dest_path = GUI::format("%1%/icons/PrusaSlicer-gcodeviewer%2%.png", homedir, version_suffix);
     BOOST_LOG_TRIVIAL(debug) << icon_path;
     BOOST_LOG_TRIVIAL(debug) << dest_path;
     std::string error_message;
@@ -2586,7 +2649,7 @@ void ConfigWizard::priv::perform_desktop_integration()
 
     // Copy icon PrusaSlicer.png from resources_dir()/icons to homedir/icons/
     icon_path = GUI::format("%1%/icons/PrusaSlicer.png",resources_dir());
-    dest_path = GUI::format("%1%/icons/PrusaSlicer.png", homedir);
+    dest_path = GUI::format("%1%/icons/PrusaSlicer.png%2%", homedir, version_suffix);
     BOOST_LOG_TRIVIAL(debug) << icon_path;
     BOOST_LOG_TRIVIAL(debug) << dest_path;
     auto cfr = copy_file(icon_path, dest_path, error_message, false);
@@ -2600,7 +2663,7 @@ void ConfigWizard::priv::perform_desktop_integration()
         "[Desktop Entry]\n"
         "Name=PrusaSlicer%1%\n"
         "GenericName=3D Printing Software\n"
-        "Icon=PrusaSlicer\n"
+        "Icon=PrusaSlicer%1%\n"
         "Exec=%2% %%F\n"
         "Terminal=false\n"
         "Type=Application\n"
@@ -2618,9 +2681,9 @@ void ConfigWizard::priv::perform_desktop_integration()
     // Write gcode viewer desktop file
     desktop_file = GUI::format(
         "[Desktop Entry]\n"
-        "Name=Prusa Gcode viewer%1%\n"
+        "Name=Prusa Gcode Viewer%1%\n"
         "GenericName=3D Printing Software\n"
-        "Icon=PrusaSlicer-gcodeviewer\n"
+        "Icon=PrusaSlicer-gcodeviewer%1%\n"
         "Exec=%2% --gcodeviwer %%F\n"
         "Terminal=false\n"
         "Type=Application\n"

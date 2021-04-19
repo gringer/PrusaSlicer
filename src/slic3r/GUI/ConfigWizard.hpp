@@ -45,7 +45,12 @@ public:
     bool run(RunReason reason, StartPage start_page = SP_WELCOME);
 
     static const wxString& name(const bool from_menu = false);
-
+    // undo_desktop_integration is here because perform_desktop_integration is inside priv.
+    // Perhaps both should move to more suitable place when its fuctionality is decided.
+#ifdef __linux__
+    static void undo_desktop_integration(); 
+    static bool can_undo_desktop_integration();
+#endif
 protected:
     void on_dpi_changed(const wxRect &suggested_rect) override ;
 

@@ -1623,6 +1623,10 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
         local_menu->Append(config_id_base + ConfigMenuSnapshots, _L("&Configuration Snapshots") + dots, _L("Inspect / activate configuration snapshots"));
         local_menu->Append(config_id_base + ConfigMenuTakeSnapshot, _L("Take Configuration &Snapshot"), _L("Capture a configuration snapshot"));
         local_menu->Append(config_id_base + ConfigMenuUpdate, _L("Check for updates"), _L("Check for configuration updates"));
+#ifdef __linux__
+        if (ConfigWizard::can_undo_desktop_integration())  
+            local_menu->Append(config_id_base + ConfigMenuUndoDesktopIntegration, _L("Undo Desktop Integration"), _L("Undo Desktop Integration"));    
+#endif        
         local_menu->AppendSeparator();
     }
     local_menu->Append(config_id_base + ConfigMenuPreferences, _L("&Preferences") + dots +
@@ -1663,6 +1667,11 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
 		case ConfigMenuUpdate:
 			check_updates(true);
 			break;
+#ifdef __linux__
+        case ConfigMenuUndoDesktopIntegration:
+            ConfigWizard::undo_desktop_integration();
+            break;
+#endif
         case ConfigMenuTakeSnapshot:
             // Take a configuration snapshot.
             if (check_unsaved_changes()) {

@@ -76,6 +76,7 @@ enum ConfigMenuIDs {
     ConfigMenuSnapshots,
     ConfigMenuTakeSnapshot,
     ConfigMenuUpdate,
+    ConfigMenuUndoDesktopIntegration,
     ConfigMenuPreferences,
     ConfigMenuModeSimple,
     ConfigMenuModeAdvanced,
