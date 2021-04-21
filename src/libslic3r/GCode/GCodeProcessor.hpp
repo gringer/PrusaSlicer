@@ -46,6 +46,7 @@ namespace Slic3r {
             std::vector<std::pair<EMoveType, float>> moves_times;
             std::vector<std::pair<ExtrusionRole, float>> roles_times;
             std::vector<float> layers_times;
+            std::vector<float> used_filaments;
 
             void reset() {
                 time = 0.0f;
@@ -53,6 +54,7 @@ namespace Slic3r {
                 moves_times.clear();
                 roles_times.clear();
                 layers_times.clear();
+                used_filaments.clear();
             }
         };
 
@@ -241,6 +243,15 @@ namespace Slic3r {
                 void reset();
             };
 
+            struct UsedFilaments // filaments per ColorChange
+            {
+                bool needed;
+                float cache;
+                std::vector<float> distances;
+
+                void reset();
+            };
+
             struct G1LinesCacheItem
             {
                 unsigned int id;
@@ -271,6 +282,7 @@ namespace Slic3r {
             State curr;
             State prev;
             CustomGCodeTime gcode_time;
+            UsedFilaments used_filaments;
             std::vector<TimeBlock> blocks;
             std::vector<G1LinesCacheItem> g1_times_cache;
             std::array<float, static_cast<size_t>(EMoveType::Count)> moves_time;
@@ -545,6 +557,7 @@ namespace Slic3r {
         float get_time(PrintEstimatedTimeStatistics::ETimeMode mode) const;
         std::string get_time_dhm(PrintEstimatedTimeStatistics::ETimeMode mode) const;
         std::vector<std::pair<CustomGCode::Type, std::pair<float, float>>> get_custom_gcode_times(PrintEstimatedTimeStatistics::ETimeMode mode, bool include_remaining) const;
+        std::vector<float> get_used_filaments(PrintEstimatedTimeStatistics::ETimeMode mode) const;
 
         std::vector<std::pair<EMoveType, float>> get_moves_time(PrintEstimatedTimeStatistics::ETimeMode mode) const;
         std::vector<std::pair<ExtrusionRole, float>> get_roles_time(PrintEstimatedTimeStatistics::ETimeMode mode) const;

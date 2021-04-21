@@ -4036,7 +4036,8 @@ void GCodeViewer::render_legend() const
     float percent_bar_size = 2.0f * ImGui::GetTextLineHeight();
 
     auto append_item = [this, draw_list, icon_size, percent_bar_size, &imgui](EItemType type, const Color& color, const std::string& label,
-        bool visible = true, const std::string& time = "", float percent = 0.0f, float max_percent = 0.0f, const std::array<float, 2>& offsets = { 0.0f, 0.0f },
+//        bool visible = true, const std::string& time = "", float percent = 0.0f, float max_percent = 0.0f, const std::array<float, 2>& offsets = { 0.0f, 0.0f },
+        bool visible = true, const std::string& time = "", float percent = 0.0f, float max_percent = 0.0f, const std::array<float, 4>& offsets = { 0.0f, 0.0f, 0.0f, 0.0f },
         std::function<void()> callback = nullptr) {
             if (!visible)
                 ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.3333f);
@@ -4143,12 +4144,21 @@ void GCodeViewer::render_legend() const
         }
     };
 
-    auto append_headers = [&imgui](const std::array<std::string, 3>& texts, const std::array<float, 2>& offsets) {
-        imgui.text(texts[0]);
-        ImGui::SameLine(offsets[0]);
-        imgui.text(texts[1]);
-        ImGui::SameLine(offsets[1]);
-        imgui.text(texts[2]);
+    //auto append_headers = [&imgui](const std::array<std::string, 3>& texts, const std::array<float, 2>& offsets) {
+    //    imgui.text(texts[0]);
+    //    ImGui::SameLine(offsets[0]);
+    //    imgui.text(texts[1]);
+    //    ImGui::SameLine(offsets[1]);
+    //    imgui.text(texts[2]);
+    //    ImGui::Separator();
+    //};
+    auto append_headers = [&imgui](const std::array<std::string, 5>& texts, const std::array<float, 4>& offsets) {
+        size_t i = 0;
+        for (; i < offsets.size(); i++) {
+            imgui.text(texts[i]);
+            ImGui::SameLine(offsets[i]);
+        }
+        imgui.text(texts[i]);
         ImGui::Separator();
     };
 
@@ -4160,12 +4170,21 @@ void GCodeViewer::render_legend() const
         return ret;
     };
 
+    //auto calculate_offsets = [max_width](const std::vector<std::string>& labels, const std::vector<std::string>& times,
+    //    const std::array<std::string, 2>& titles, float extra_size = 0.0f) {
+    //        const ImGuiStyle& style = ImGui::GetStyle();
+    //        std::array<float, 2> ret = { 0.0f, 0.0f };
+    //        ret[0] = max_width(labels, titles[0], extra_size) + 3.0f * style.ItemSpacing.x;
+    //        ret[1] = ret[0] + max_width(times, titles[1]) + style.ItemSpacing.x;
+    //        return ret;
+    //};
     auto calculate_offsets = [max_width](const std::vector<std::string>& labels, const std::vector<std::string>& times,
-        const std::array<std::string, 2>& titles, float extra_size = 0.0f) {
+        const std::array<std::string, 4>& titles, float extra_size = 0.0f) {
             const ImGuiStyle& style = ImGui::GetStyle();
-            std::array<float, 2> ret = { 0.0f, 0.0f };
+            std::array<float, 4> ret = { 0.0f, 0.0f, 0.0f, 0.0f };
             ret[0] = max_width(labels, titles[0], extra_size) + 3.0f * style.ItemSpacing.x;
-            ret[1] = ret[0] + max_width(times, titles[1]) + style.ItemSpacing.x;
+            for (size_t i = 1; i < titles.size(); i++)
+                ret[i] = ret[i-1] + max_width(times, titles[i]) + style.ItemSpacing.x;
             return ret;
     };
 
@@ -4222,7 +4241,8 @@ void GCodeViewer::render_legend() const
     };
 
     // data used to properly align items in columns when showing time
-    std::array<float, 2> offsets = { 0.0f, 0.0f };
+//    std::array<float, 2> offsets = { 0.0f, 0.0f };
+    std::array<float, 4> offsets = { 0.0f, 0.0f, 0.0f, 0.0f };
     std::vector<std::string> labels;
     std::vector<std::string> times;
     std::vector<float> percents;
@@ -4379,11 +4399,26 @@ void GCodeViewer::render_legend() const
             Color color1;
             Color color2;
             Times times;
+            std::pair<double, double> used_filament {0.0f, 0.0f};
         };
         using PartialTimes = std::vector<PartialTime>;
 
-        auto generate_partial_times = [this](const TimesList& times) {
+        auto generate_partial_times = [this](const TimesList& times, const std::vector<float>& used_filaments) {
             PartialTimes items;
+
+            auto get_used_filament = [](float volume, int extruder_id) {
+                const std::vector<std::string>& filament_presets = wxGetApp().preset_bundle->filament_presets;
+                const PresetCollection& filaments = wxGetApp().preset_bundle->filaments;
+                std::pair<double, double>  ret = { 0.0f, 0.0f };
+                if (const Preset* filament_preset = filaments.find_preset(filament_presets[extruder_id], false)) {
+                    double filament_radius = 0.5*filament_preset->config.opt_float("filament_diameter", 0);
+                    double s = PI * sqr(filament_radius);
+                    ret.first = volume / s * 0.001;
+                    double filament_density = filament_preset->config.opt_float("filament_density", 0);
+                    ret.second = volume * filament_density * 0.001;
+                }
+                return ret;
+            };
 
             std::vector<CustomGCode::Item> custom_gcode_per_print_z = wxGetApp().plater()->model().custom_gcode_per_print_z.gcodes;
             int extruders_count = wxGetApp().extruders_edited_cnt();
@@ -4392,6 +4427,7 @@ void GCodeViewer::render_legend() const
                 last_color[i] = m_tool_colors[i];
             }
             int last_extruder_id = 1;
+            int color_change_idx = 0;
             for (const auto& time_rec : times) {
                 switch (time_rec.first)
                 {
@@ -4407,14 +4443,14 @@ void GCodeViewer::render_legend() const
                 case CustomGCode::ColorChange: {
                     auto it = std::find_if(custom_gcode_per_print_z.begin(), custom_gcode_per_print_z.end(), [time_rec](const CustomGCode::Item& item) { return item.type == time_rec.first; });
                     if (it != custom_gcode_per_print_z.end()) {
-                        items.push_back({ PartialTime::EType::Print, it->extruder, last_color[it->extruder - 1], Color(), time_rec.second });
+                        items.push_back({ PartialTime::EType::Print, it->extruder, last_color[it->extruder - 1], Color(), time_rec.second, get_used_filament(used_filaments[color_change_idx++], it->extruder-1) });
                         items.push_back({ PartialTime::EType::ColorChange, it->extruder, last_color[it->extruder - 1], decode_color(it->color), time_rec.second });
                         last_color[it->extruder - 1] = decode_color(it->color);
                         last_extruder_id = it->extruder;
                         custom_gcode_per_print_z.erase(it);
                     }
                     else
-                        items.push_back({ PartialTime::EType::Print, last_extruder_id, last_color[last_extruder_id - 1], Color(), time_rec.second });
+                        items.push_back({ PartialTime::EType::Print, last_extruder_id, last_color[last_extruder_id - 1], Color(), time_rec.second, get_used_filament(used_filaments[color_change_idx++], last_extruder_id -1) });
 
                     break;
                 }
@@ -4425,7 +4461,8 @@ void GCodeViewer::render_legend() const
             return items;
         };
 
-        auto append_color_change = [&imgui](const Color& color1, const Color& color2, const std::array<float, 2>& offsets, const Times& times) {
+//        auto append_color_change = [&imgui](const Color& color1, const Color& color2, const std::array<float, 2>& offsets, const Times& times) {
+        auto append_color_change = [&imgui](const Color& color1, const Color& color2, const std::array<float, 4>& offsets, const Times& times) {
             imgui.text(_u8L("Color change"));
             ImGui::SameLine();
 
@@ -4444,7 +4481,8 @@ void GCodeViewer::render_legend() const
             imgui.text(short_time(get_time_dhms(times.second - times.first)));
         };
 
-        auto append_print = [&imgui](const Color& color, const std::array<float, 2>& offsets, const Times& times) {
+//        auto append_print = [&imgui](const Color& color, const std::array<float, 2>& offsets, const Times& times) {
+        auto append_print = [&imgui](const Color& color, const std::array<float, 4>& offsets, const Times& times, std::pair<double, double> used_filament) {
             imgui.text(_u8L("Print"));
             ImGui::SameLine();
 
@@ -4460,9 +4498,19 @@ void GCodeViewer::render_legend() const
             imgui.text(short_time(get_time_dhms(times.second)));
             ImGui::SameLine(offsets[1]);
             imgui.text(short_time(get_time_dhms(times.first)));
+            if (used_filament.first > 0.0f) {
+                char buffer[64];
+                ImGui::SameLine(offsets[2]);
+                ::sprintf(buffer, "%.2f m", used_filament.first);
+                imgui.text(buffer);
+
+                ImGui::SameLine(offsets[3]);
+                ::sprintf(buffer, "%.2f g", used_filament.second);
+                imgui.text(buffer);
+            }
         };
 
-        PartialTimes partial_times = generate_partial_times(time_mode.custom_gcode_times);
+        PartialTimes partial_times = generate_partial_times(time_mode.custom_gcode_times, time_mode.used_filaments);
         if (!partial_times.empty()) {
             labels.clear();
             times.clear();
@@ -4476,15 +4524,17 @@ void GCodeViewer::render_legend() const
                 }
                 times.push_back(short_time(get_time_dhms(item.times.second)));
             }
-            offsets = calculate_offsets(labels, times, { _u8L("Event"), _u8L("Remaining time") }, 2.0f * icon_size);
+//            offsets = calculate_offsets(labels, times, { _u8L("Event"), _u8L("Remaining time") }, 2.0f * icon_size);
+            offsets = calculate_offsets(labels, times, { _u8L("Event"), _u8L("Remaining time"), _u8L("Duration"), /*_u8L("Filament (m)")*/_u8L("Used filament") }, 2.0f * icon_size);
 
             ImGui::Spacing();
-            append_headers({ _u8L("Event"), _u8L("Remaining time"), _u8L("Duration") }, offsets);
+//            append_headers({ _u8L("Event"), _u8L("Remaining time"), _u8L("Duration") }, offsets);
+            append_headers({ _u8L("Event"), _u8L("Remaining time"), _u8L("Duration"), /*_u8L("Filament (m)"), _u8L("Filament (g)")*/_u8L("Used filament") }, offsets);
             for (const PartialTime& item : partial_times) {
                 switch (item.type)
                 {
                 case PartialTime::EType::Print: {
-                    append_print(item.color1, offsets, item.times);
+                    append_print(item.color1, offsets, item.times, item.used_filament);
                     break;
                 }
                 case PartialTime::EType::Pause: {

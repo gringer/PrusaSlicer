@@ -186,6 +186,13 @@ void GCodeProcessor::TimeMachine::CustomGCodeTime::reset()
     times = std::vector<std::pair<CustomGCode::Type, float>>();
 }
 
+void GCodeProcessor::TimeMachine::UsedFilaments::reset()
+{
+    needed = false;
+    cache = 0.0f;
+    distances = std::vector<float>();
+}
+
 void GCodeProcessor::TimeMachine::reset()
 {
     enabled = false;
@@ -201,6 +208,7 @@ void GCodeProcessor::TimeMachine::reset()
     curr.reset();
     prev.reset();
     gcode_time.reset();
+    used_filaments.reset();
     blocks = std::vector<TimeBlock>();
     g1_times_cache = std::vector<G1LinesCacheItem>();
     std::fill(moves_time.begin(), moves_time.end(), 0.0f);
@@ -309,6 +317,13 @@ void GCodeProcessor::TimeMachine::calculate_time(size_t keep_last_n_blocks)
     size_t n_blocks_process = blocks.size() - keep_last_n_blocks;
     for (size_t i = 0; i < n_blocks_process; ++i) {
         const TimeBlock& block = blocks[i];
+        if (block.move_type == EMoveType::Extrude       || 
+            block.move_type == EMoveType::Retract       || 
+            block.move_type == EMoveType::Unretract     ||
+            block.move_type == EMoveType::Color_change  || 
+            block.move_type == EMoveType::Wipe              ) {
+            used_filaments.cache += block.distance;
+        }
         float block_time = block.time();
         time += block_time;
         gcode_time.cache += block_time;
@@ -1170,9 +1185,12 @@ void GCodeProcessor::process_file(const std::string& filename, bool apply_postpr
     for (size_t i = 0; i < static_cast<size_t>(PrintEstimatedTimeStatistics::ETimeMode::Count); ++i) {
         TimeMachine& machine = m_time_processor.machines[i];
         TimeMachine::CustomGCodeTime& gcode_time = machine.gcode_time;
+        TimeMachine::UsedFilaments& used_filaments = machine.used_filaments;
         machine.calculate_time();
         if (gcode_time.needed && gcode_time.cache != 0.0f)
             gcode_time.times.push_back({ CustomGCode::ColorChange, gcode_time.cache });
+        if (used_filaments.needed && used_filaments.cache != 0.0f)
+            used_filaments.distances.push_back({ used_filaments.cache });
     }
 
     update_estimated_times_stats();
@@ -1217,6 +1235,18 @@ std::vector<std::pair<CustomGCode::Type, std::pair<float, float>>> GCodeProcesso
             float remaining = include_remaining ? machine.time - total_time : 0.0f;
             ret.push_back({ type, { time, remaining } });
             total_time += time;
+        }
+    }
+    return ret;
+}
+
+std::vector<float> GCodeProcessor::get_used_filaments(PrintEstimatedTimeStatistics::ETimeMode mode) const
+{
+    std::vector<float> ret;
+    if (mode < PrintEstimatedTimeStatistics::ETimeMode::Count) {
+        const TimeMachine& machine = m_time_processor.machines[static_cast<size_t>(mode)];
+        for (const auto& distance : machine.used_filaments.distances) {
+            ret.push_back(distance * m_mm3_per_mm);
         }
     }
     return ret;
@@ -1520,7 +1550,8 @@ void GCodeProcessor::process_tags(const std::string_view comment)
             extruder_id = static_cast<unsigned char>(eid);
         }
 
-        m_extruder_colors[extruder_id] = static_cast<unsigned char>(m_extruder_offsets.size()) + m_cp_color.counter; // color_change position in list of color for preview
+        if (extruder_id < m_extruder_colors.size())
+            m_extruder_colors[extruder_id] = static_cast<unsigned char>(m_extruder_offsets.size()) + m_cp_color.counter; // color_change position in list of color for preview
         ++m_cp_color.counter;
         if (m_cp_color.counter == UCHAR_MAX)
             m_cp_color.counter = 0;
@@ -2962,6 +2993,13 @@ void GCodeProcessor::process_custom_gcode_time(CustomGCode::Type code)
             gcode_time.times.push_back({ code, gcode_time.cache });
             gcode_time.cache = 0.0f;
         }
+
+        TimeMachine::UsedFilaments& used_filaments = machine.used_filaments;
+        used_filaments.needed = true;
+        if (used_filaments.cache != 0.0f && code == CustomGCode::ColorChange) {
+            used_filaments.distances.push_back({ used_filaments.cache });
+            used_filaments.cache = 0.0f;
+        }
     }
 }
 
@@ -2981,6 +3019,8 @@ void GCodeProcessor::update_estimated_times_stats()
         data.moves_times = get_moves_time(mode);
         data.roles_times = get_roles_time(mode);
         data.layers_times = get_layers_time(mode);
+
+        data.used_filaments = get_used_filaments(mode);
     };
 
     update_mode(PrintEstimatedTimeStatistics::ETimeMode::Normal);
