@@ -30,7 +30,7 @@ namespace Slic3r {
         Count
     };
 
-    struct PrintEstimatedTimeStatistics
+    struct PrintEstimatedStatistics
     {
         enum class ETimeMode : unsigned char
         {
@@ -46,7 +46,6 @@ namespace Slic3r {
             std::vector<std::pair<EMoveType, float>> moves_times;
             std::vector<std::pair<ExtrusionRole, float>> roles_times;
             std::vector<float> layers_times;
-            std::vector<float> used_filaments;
 
             void reset() {
                 time = 0.0f;
@@ -54,18 +53,20 @@ namespace Slic3r {
                 moves_times.clear();
                 roles_times.clear();
                 layers_times.clear();
-                used_filaments.clear();
             }
         };
 
+        std::vector<float> used_filaments;
+
         std::array<Mode, static_cast<size_t>(ETimeMode::Count)> modes;
 
-        PrintEstimatedTimeStatistics() { reset(); }
+        PrintEstimatedStatistics() { reset(); }
 
         void reset() {
             for (auto m : modes) {
                 m.reset();
             }
+            used_filaments.clear();
         }
     };
 
@@ -243,15 +244,6 @@ namespace Slic3r {
                 void reset();
             };
 
-            struct UsedFilaments // filaments per ColorChange
-            {
-                bool needed;
-                float cache;
-                std::vector<float> distances;
-
-                void reset();
-            };
-
             struct G1LinesCacheItem
             {
                 unsigned int id;
@@ -282,7 +274,6 @@ namespace Slic3r {
             State curr;
             State prev;
             CustomGCodeTime gcode_time;
-            UsedFilaments used_filaments;
             std::vector<TimeBlock> blocks;
             std::vector<G1LinesCacheItem> g1_times_cache;
             std::array<float, static_cast<size_t>(EMoveType::Count)> moves_time;
@@ -320,7 +311,7 @@ namespace Slic3r {
             // Additional load / unload times for a filament exchange sequence.
             std::vector<float> filament_load_times;
             std::vector<float> filament_unload_times;
-            std::array<TimeMachine, static_cast<size_t>(PrintEstimatedTimeStatistics::ETimeMode::Count)> machines;
+            std::array<TimeMachine, static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Count)> machines;
 
             void reset();
 
@@ -331,6 +322,15 @@ namespace Slic3r {
 #else
             void post_process(const std::string& filename);
 #endif // ENABLE_GCODE_LINES_ID_IN_H_SLIDER
+        };
+
+        struct UsedFilaments  // filaments per ColorChange
+        {
+            bool needed;
+            float cache;
+            std::vector<float> volumes;
+
+            void reset();
         };
 
     public:
@@ -378,7 +378,7 @@ namespace Slic3r {
             SettingsIds settings_ids;
             size_t extruders_count;
             std::vector<std::string> extruder_colors;
-            PrintEstimatedTimeStatistics time_statistics;
+            PrintEstimatedStatistics print_statistics;
 
 #if ENABLE_GCODE_VIEWER_STATISTICS
             int64_t time{ 0 };
@@ -525,6 +525,7 @@ namespace Slic3r {
         bool m_producers_enabled;
 
         TimeProcessor m_time_processor;
+        UsedFilaments m_used_filaments;
 
         Result m_result;
         static unsigned int s_result_id;
@@ -541,7 +542,7 @@ namespace Slic3r {
         void apply_config(const PrintConfig& config);
         void enable_stealth_time_estimator(bool enabled);
         bool is_stealth_time_estimator_enabled() const {
-            return m_time_processor.machines[static_cast<size_t>(PrintEstimatedTimeStatistics::ETimeMode::Stealth)].enabled;
+            return m_time_processor.machines[static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Stealth)].enabled;
         }
         void enable_machine_envelope_processing(bool enabled) { m_time_processor.machine_envelope_processing_enabled = enabled; }
         void enable_producers(bool enabled) { m_producers_enabled = enabled; }
@@ -554,14 +555,13 @@ namespace Slic3r {
         // throws CanceledException through print->throw_if_canceled() (sent by the caller as callback).
         void process_file(const std::string& filename, bool apply_postprocess, std::function<void()> cancel_callback = nullptr);
 
-        float get_time(PrintEstimatedTimeStatistics::ETimeMode mode) const;
-        std::string get_time_dhm(PrintEstimatedTimeStatistics::ETimeMode mode) const;
-        std::vector<std::pair<CustomGCode::Type, std::pair<float, float>>> get_custom_gcode_times(PrintEstimatedTimeStatistics::ETimeMode mode, bool include_remaining) const;
-        std::vector<float> get_used_filaments(PrintEstimatedTimeStatistics::ETimeMode mode) const;
+        float get_time(PrintEstimatedStatistics::ETimeMode mode) const;
+        std::string get_time_dhm(PrintEstimatedStatistics::ETimeMode mode) const;
+        std::vector<std::pair<CustomGCode::Type, std::pair<float, float>>> get_custom_gcode_times(PrintEstimatedStatistics::ETimeMode mode, bool include_remaining) const;
 
-        std::vector<std::pair<EMoveType, float>> get_moves_time(PrintEstimatedTimeStatistics::ETimeMode mode) const;
-        std::vector<std::pair<ExtrusionRole, float>> get_roles_time(PrintEstimatedTimeStatistics::ETimeMode mode) const;
-        std::vector<float> get_layers_time(PrintEstimatedTimeStatistics::ETimeMode mode) const;
+        std::vector<std::pair<EMoveType, float>> get_moves_time(PrintEstimatedStatistics::ETimeMode mode) const;
+        std::vector<std::pair<ExtrusionRole, float>> get_roles_time(PrintEstimatedStatistics::ETimeMode mode) const;
+        std::vector<float> get_layers_time(PrintEstimatedStatistics::ETimeMode mode) const;
 
     private:
         void apply_config(const DynamicPrintConfig& config);
@@ -677,20 +677,21 @@ namespace Slic3r {
 
         void store_move_vertex(EMoveType type);
 
-        float minimum_feedrate(PrintEstimatedTimeStatistics::ETimeMode mode, float feedrate) const;
-        float minimum_travel_feedrate(PrintEstimatedTimeStatistics::ETimeMode mode, float feedrate) const;
-        float get_axis_max_feedrate(PrintEstimatedTimeStatistics::ETimeMode mode, Axis axis) const;
-        float get_axis_max_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode, Axis axis) const;
-        float get_axis_max_jerk(PrintEstimatedTimeStatistics::ETimeMode mode, Axis axis) const;
-        float get_retract_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode) const;
-        float get_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode) const;
-        void  set_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode, float value);
-        float get_travel_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode) const;
-        void  set_travel_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode, float value);
+        float minimum_feedrate(PrintEstimatedStatistics::ETimeMode mode, float feedrate) const;
+        float minimum_travel_feedrate(PrintEstimatedStatistics::ETimeMode mode, float feedrate) const;
+        float get_axis_max_feedrate(PrintEstimatedStatistics::ETimeMode mode, Axis axis) const;
+        float get_axis_max_acceleration(PrintEstimatedStatistics::ETimeMode mode, Axis axis) const;
+        float get_axis_max_jerk(PrintEstimatedStatistics::ETimeMode mode, Axis axis) const;
+        float get_retract_acceleration(PrintEstimatedStatistics::ETimeMode mode) const;
+        float get_acceleration(PrintEstimatedStatistics::ETimeMode mode) const;
+        void  set_acceleration(PrintEstimatedStatistics::ETimeMode mode, float value);
+        float get_travel_acceleration(PrintEstimatedStatistics::ETimeMode mode) const;
+        void  set_travel_acceleration(PrintEstimatedStatistics::ETimeMode mode, float value);
         float get_filament_load_time(size_t extruder_id);
         float get_filament_unload_time(size_t extruder_id);
 
         void process_custom_gcode_time(CustomGCode::Type code);
+        void process_custom_gcode_filament(CustomGCode::Type code);
 
         // Simulates firmware st_synchronize() call
         void simulate_st_synchronize(float additional_time = 0.0f);

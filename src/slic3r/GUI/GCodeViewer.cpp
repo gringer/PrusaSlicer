@@ -672,13 +672,13 @@ void GCodeViewer::load(const GCodeProcessor::Result& gcode_result, const Print& 
         wxGetApp().plater()->set_bed_shape(bed_shape, texture, model, gcode_result.bed_shape.empty());
     }
 
-    m_time_statistics = gcode_result.time_statistics;
+    m_print_statistics = gcode_result.print_statistics;
 
-    if (m_time_estimate_mode != PrintEstimatedTimeStatistics::ETimeMode::Normal) {
-        float time = m_time_statistics.modes[static_cast<size_t>(m_time_estimate_mode)].time;
+    if (m_time_estimate_mode != PrintEstimatedStatistics::ETimeMode::Normal) {
+        float time = m_print_statistics.modes[static_cast<size_t>(m_time_estimate_mode)].time;
         if (time == 0.0f ||
-            short_time(get_time_dhms(time)) == short_time(get_time_dhms(m_time_statistics.modes[static_cast<size_t>(PrintEstimatedTimeStatistics::ETimeMode::Normal)].time)))
-            m_time_estimate_mode = PrintEstimatedTimeStatistics::ETimeMode::Normal;
+            short_time(get_time_dhms(time)) == short_time(get_time_dhms(m_print_statistics.modes[static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Normal)].time)))
+            m_time_estimate_mode = PrintEstimatedStatistics::ETimeMode::Normal;
     }
 }
 
@@ -773,7 +773,7 @@ void GCodeViewer::reset()
     m_layers.reset();
     m_layers_z_range = { 0, 0 };
     m_roles = std::vector<ExtrusionRole>();
-    m_time_statistics.reset();
+    m_print_statistics.reset();
 #if ENABLE_GCODE_WINDOW
     m_sequential_view.gcode_window.reset();
 #endif // ENABLE_GCODE_WINDOW
@@ -4030,13 +4030,12 @@ void GCodeViewer::render_legend() const
         Line
     };
 
-    const PrintEstimatedTimeStatistics::Mode& time_mode = m_time_statistics.modes[static_cast<size_t>(m_time_estimate_mode)];
+    const PrintEstimatedStatistics::Mode& time_mode = m_print_statistics.modes[static_cast<size_t>(m_time_estimate_mode)];
 
     float icon_size = ImGui::GetTextLineHeight();
     float percent_bar_size = 2.0f * ImGui::GetTextLineHeight();
 
     auto append_item = [this, draw_list, icon_size, percent_bar_size, &imgui](EItemType type, const Color& color, const std::string& label,
-//        bool visible = true, const std::string& time = "", float percent = 0.0f, float max_percent = 0.0f, const std::array<float, 2>& offsets = { 0.0f, 0.0f },
         bool visible = true, const std::string& time = "", float percent = 0.0f, float max_percent = 0.0f, const std::array<float, 4>& offsets = { 0.0f, 0.0f, 0.0f, 0.0f },
         std::function<void()> callback = nullptr) {
             if (!visible)
@@ -4144,14 +4143,6 @@ void GCodeViewer::render_legend() const
         }
     };
 
-    //auto append_headers = [&imgui](const std::array<std::string, 3>& texts, const std::array<float, 2>& offsets) {
-    //    imgui.text(texts[0]);
-    //    ImGui::SameLine(offsets[0]);
-    //    imgui.text(texts[1]);
-    //    ImGui::SameLine(offsets[1]);
-    //    imgui.text(texts[2]);
-    //    ImGui::Separator();
-    //};
     auto append_headers = [&imgui](const std::array<std::string, 5>& texts, const std::array<float, 4>& offsets) {
         size_t i = 0;
         for (; i < offsets.size(); i++) {
@@ -4170,14 +4161,6 @@ void GCodeViewer::render_legend() const
         return ret;
     };
 
-    //auto calculate_offsets = [max_width](const std::vector<std::string>& labels, const std::vector<std::string>& times,
-    //    const std::array<std::string, 2>& titles, float extra_size = 0.0f) {
-    //        const ImGuiStyle& style = ImGui::GetStyle();
-    //        std::array<float, 2> ret = { 0.0f, 0.0f };
-    //        ret[0] = max_width(labels, titles[0], extra_size) + 3.0f * style.ItemSpacing.x;
-    //        ret[1] = ret[0] + max_width(times, titles[1]) + style.ItemSpacing.x;
-    //        return ret;
-    //};
     auto calculate_offsets = [max_width](const std::vector<std::string>& labels, const std::vector<std::string>& times,
         const std::array<std::string, 4>& titles, float extra_size = 0.0f) {
             const ImGuiStyle& style = ImGui::GetStyle();
@@ -4241,7 +4224,6 @@ void GCodeViewer::render_legend() const
     };
 
     // data used to properly align items in columns when showing time
-//    std::array<float, 2> offsets = { 0.0f, 0.0f };
     std::array<float, 4> offsets = { 0.0f, 0.0f, 0.0f, 0.0f };
     std::vector<std::string> labels;
     std::vector<std::string> times;
@@ -4461,7 +4443,6 @@ void GCodeViewer::render_legend() const
             return items;
         };
 
-//        auto append_color_change = [&imgui](const Color& color1, const Color& color2, const std::array<float, 2>& offsets, const Times& times) {
         auto append_color_change = [&imgui](const Color& color1, const Color& color2, const std::array<float, 4>& offsets, const Times& times) {
             imgui.text(_u8L("Color change"));
             ImGui::SameLine();
@@ -4481,7 +4462,6 @@ void GCodeViewer::render_legend() const
             imgui.text(short_time(get_time_dhms(times.second - times.first)));
         };
 
-//        auto append_print = [&imgui](const Color& color, const std::array<float, 2>& offsets, const Times& times) {
         auto append_print = [&imgui](const Color& color, const std::array<float, 4>& offsets, const Times& times, std::pair<double, double> used_filament) {
             imgui.text(_u8L("Print"));
             ImGui::SameLine();
@@ -4510,7 +4490,7 @@ void GCodeViewer::render_legend() const
             }
         };
 
-        PartialTimes partial_times = generate_partial_times(time_mode.custom_gcode_times, time_mode.used_filaments);
+        PartialTimes partial_times = generate_partial_times(time_mode.custom_gcode_times, m_print_statistics.used_filaments);
         if (!partial_times.empty()) {
             labels.clear();
             times.clear();
@@ -4524,11 +4504,9 @@ void GCodeViewer::render_legend() const
                 }
                 times.push_back(short_time(get_time_dhms(item.times.second)));
             }
-//            offsets = calculate_offsets(labels, times, { _u8L("Event"), _u8L("Remaining time") }, 2.0f * icon_size);
             offsets = calculate_offsets(labels, times, { _u8L("Event"), _u8L("Remaining time"), _u8L("Duration"), /*_u8L("Filament (m)")*/_u8L("Used filament") }, 2.0f * icon_size);
 
             ImGui::Spacing();
-//            append_headers({ _u8L("Event"), _u8L("Remaining time"), _u8L("Duration") }, offsets);
             append_headers({ _u8L("Event"), _u8L("Remaining time"), _u8L("Duration"), /*_u8L("Filament (m)"), _u8L("Filament (g)")*/_u8L("Used filament") }, offsets);
             for (const PartialTime& item : partial_times) {
                 switch (item.type)
@@ -4697,12 +4675,12 @@ void GCodeViewer::render_legend() const
         ImGui::AlignTextToFramePadding();
         switch (m_time_estimate_mode)
         {
-        case PrintEstimatedTimeStatistics::ETimeMode::Normal:
+        case PrintEstimatedStatistics::ETimeMode::Normal:
         {
             imgui.text(_u8L("Estimated printing time") + " [" + _u8L("Normal mode") + "]:");
             break;
         }
-        case PrintEstimatedTimeStatistics::ETimeMode::Stealth:
+        case PrintEstimatedStatistics::ETimeMode::Stealth:
         {
             imgui.text(_u8L("Estimated printing time") + " [" + _u8L("Stealth mode") + "]:");
             break;
@@ -4712,18 +4690,18 @@ void GCodeViewer::render_legend() const
         ImGui::SameLine();
         imgui.text(short_time(get_time_dhms(time_mode.time)));
 
-        auto show_mode_button = [this, &imgui](const wxString& label, PrintEstimatedTimeStatistics::ETimeMode mode) {
+        auto show_mode_button = [this, &imgui](const wxString& label, PrintEstimatedStatistics::ETimeMode mode) {
             bool show = false;
-            for (size_t i = 0; i < m_time_statistics.modes.size(); ++i) {
+            for (size_t i = 0; i < m_print_statistics.modes.size(); ++i) {
                 if (i != static_cast<size_t>(mode) &&
-                    short_time(get_time_dhms(m_time_statistics.modes[static_cast<size_t>(mode)].time)) != short_time(get_time_dhms(m_time_statistics.modes[i].time))) {
+                    short_time(get_time_dhms(m_print_statistics.modes[static_cast<size_t>(mode)].time)) != short_time(get_time_dhms(m_print_statistics.modes[i].time))) {
                     show = true;
                     break;
                 }
             }
-            if (show && m_time_statistics.modes[static_cast<size_t>(mode)].roles_times.size() > 0) {
+            if (show && m_print_statistics.modes[static_cast<size_t>(mode)].roles_times.size() > 0) {
                 if (imgui.button(label)) {
-                    *const_cast<PrintEstimatedTimeStatistics::ETimeMode*>(&m_time_estimate_mode) = mode;
+                    *const_cast<PrintEstimatedStatistics::ETimeMode*>(&m_time_estimate_mode) = mode;
                     wxGetApp().plater()->get_current_canvas3D()->set_as_dirty();
                     wxGetApp().plater()->get_current_canvas3D()->request_extra_frame();
                 }
@@ -4731,12 +4709,12 @@ void GCodeViewer::render_legend() const
         };
 
         switch (m_time_estimate_mode) {
-        case PrintEstimatedTimeStatistics::ETimeMode::Normal: {
-            show_mode_button(_L("Show stealth mode"), PrintEstimatedTimeStatistics::ETimeMode::Stealth);
+        case PrintEstimatedStatistics::ETimeMode::Normal: {
+            show_mode_button(_L("Show stealth mode"), PrintEstimatedStatistics::ETimeMode::Stealth);
             break;
         }
-        case PrintEstimatedTimeStatistics::ETimeMode::Stealth: {
-            show_mode_button(_L("Show normal mode"), PrintEstimatedTimeStatistics::ETimeMode::Normal);
+        case PrintEstimatedStatistics::ETimeMode::Stealth: {
+            show_mode_button(_L("Show normal mode"), PrintEstimatedStatistics::ETimeMode::Normal);
             break;
         }
         default : { assert(false); break; }
